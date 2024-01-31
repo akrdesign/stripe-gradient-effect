@@ -38094,6 +38094,951 @@ if (typeof window !== 'undefined') {
     window.__THREE__ = REVISION;
   }
 }
+},{}],"node_modules/three/examples/jsm/controls/OrbitControls.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.OrbitControls = void 0;
+var _three = require("three");
+function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor); } }
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); Object.defineProperty(Constructor, "prototype", { writable: false }); return Constructor; }
+function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _typeof(key) === "symbol" ? key : String(key); }
+function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function"); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, writable: true, configurable: true } }); Object.defineProperty(subClass, "prototype", { writable: false }); if (superClass) _setPrototypeOf(subClass, superClass); }
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+function _createSuper(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct(); return function _createSuperInternal() { var Super = _getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = _getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return _possibleConstructorReturn(this, result); }; }
+function _possibleConstructorReturn(self, call) { if (call && (_typeof(call) === "object" || typeof call === "function")) { return call; } else if (call !== void 0) { throw new TypeError("Derived constructors may only return object or undefined"); } return _assertThisInitialized(self); }
+function _assertThisInitialized(self) { if (self === void 0) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return self; }
+function _isNativeReflectConstruct() { if (typeof Reflect === "undefined" || !Reflect.construct) return false; if (Reflect.construct.sham) return false; if (typeof Proxy === "function") return true; try { Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {})); return true; } catch (e) { return false; } }
+function _getPrototypeOf(o) { _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function _getPrototypeOf(o) { return o.__proto__ || Object.getPrototypeOf(o); }; return _getPrototypeOf(o); }
+// OrbitControls performs orbiting, dollying (zooming), and panning.
+// Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
+//
+//    Orbit - left mouse / touch: one-finger move
+//    Zoom - middle mouse, or mousewheel / touch: two-finger spread or squish
+//    Pan - right mouse, or left mouse + ctrl/meta/shiftKey, or arrow keys / touch: two-finger move
+var _changeEvent = {
+  type: 'change'
+};
+var _startEvent = {
+  type: 'start'
+};
+var _endEvent = {
+  type: 'end'
+};
+var _ray = new _three.Ray();
+var _plane = new _three.Plane();
+var TILT_LIMIT = Math.cos(70 * _three.MathUtils.DEG2RAD);
+var OrbitControls = /*#__PURE__*/function (_EventDispatcher) {
+  _inherits(OrbitControls, _EventDispatcher);
+  var _super = _createSuper(OrbitControls);
+  function OrbitControls(object, domElement) {
+    var _this;
+    _classCallCheck(this, OrbitControls);
+    _this = _super.call(this);
+    _this.object = object;
+    _this.domElement = domElement;
+    _this.domElement.style.touchAction = 'none'; // disable touch scroll
+
+    // Set to false to disable this control
+    _this.enabled = true;
+
+    // "target" sets the location of focus, where the object orbits around
+    _this.target = new _three.Vector3();
+
+    // Sets the 3D cursor (similar to Blender), from which the maxTargetRadius takes effect
+    _this.cursor = new _three.Vector3();
+
+    // How far you can dolly in and out ( PerspectiveCamera only )
+    _this.minDistance = 0;
+    _this.maxDistance = Infinity;
+
+    // How far you can zoom in and out ( OrthographicCamera only )
+    _this.minZoom = 0;
+    _this.maxZoom = Infinity;
+
+    // Limit camera target within a spherical area around the cursor
+    _this.minTargetRadius = 0;
+    _this.maxTargetRadius = Infinity;
+
+    // How far you can orbit vertically, upper and lower limits.
+    // Range is 0 to Math.PI radians.
+    _this.minPolarAngle = 0; // radians
+    _this.maxPolarAngle = Math.PI; // radians
+
+    // How far you can orbit horizontally, upper and lower limits.
+    // If set, the interval [ min, max ] must be a sub-interval of [ - 2 PI, 2 PI ], with ( max - min < 2 PI )
+    _this.minAzimuthAngle = -Infinity; // radians
+    _this.maxAzimuthAngle = Infinity; // radians
+
+    // Set to true to enable damping (inertia)
+    // If damping is enabled, you must call controls.update() in your animation loop
+    _this.enableDamping = false;
+    _this.dampingFactor = 0.05;
+
+    // This option actually enables dollying in and out; left as "zoom" for backwards compatibility.
+    // Set to false to disable zooming
+    _this.enableZoom = true;
+    _this.zoomSpeed = 1.0;
+
+    // Set to false to disable rotating
+    _this.enableRotate = true;
+    _this.rotateSpeed = 1.0;
+
+    // Set to false to disable panning
+    _this.enablePan = true;
+    _this.panSpeed = 1.0;
+    _this.screenSpacePanning = true; // if false, pan orthogonal to world-space direction camera.up
+    _this.keyPanSpeed = 7.0; // pixels moved per arrow key push
+    _this.zoomToCursor = false;
+
+    // Set to true to automatically rotate around the target
+    // If auto-rotate is enabled, you must call controls.update() in your animation loop
+    _this.autoRotate = false;
+    _this.autoRotateSpeed = 2.0; // 30 seconds per orbit when fps is 60
+
+    // The four arrow keys
+    _this.keys = {
+      LEFT: 'ArrowLeft',
+      UP: 'ArrowUp',
+      RIGHT: 'ArrowRight',
+      BOTTOM: 'ArrowDown'
+    };
+
+    // Mouse buttons
+    _this.mouseButtons = {
+      LEFT: _three.MOUSE.ROTATE,
+      MIDDLE: _three.MOUSE.DOLLY,
+      RIGHT: _three.MOUSE.PAN
+    };
+
+    // Touch fingers
+    _this.touches = {
+      ONE: _three.TOUCH.ROTATE,
+      TWO: _three.TOUCH.DOLLY_PAN
+    };
+
+    // for reset
+    _this.target0 = _this.target.clone();
+    _this.position0 = _this.object.position.clone();
+    _this.zoom0 = _this.object.zoom;
+
+    // the target DOM element for key events
+    _this._domElementKeyEvents = null;
+
+    //
+    // public methods
+    //
+
+    _this.getPolarAngle = function () {
+      return spherical.phi;
+    };
+    _this.getAzimuthalAngle = function () {
+      return spherical.theta;
+    };
+    _this.getDistance = function () {
+      return this.object.position.distanceTo(this.target);
+    };
+    _this.listenToKeyEvents = function (domElement) {
+      domElement.addEventListener('keydown', onKeyDown);
+      this._domElementKeyEvents = domElement;
+    };
+    _this.stopListenToKeyEvents = function () {
+      this._domElementKeyEvents.removeEventListener('keydown', onKeyDown);
+      this._domElementKeyEvents = null;
+    };
+    _this.saveState = function () {
+      scope.target0.copy(scope.target);
+      scope.position0.copy(scope.object.position);
+      scope.zoom0 = scope.object.zoom;
+    };
+    _this.reset = function () {
+      scope.target.copy(scope.target0);
+      scope.object.position.copy(scope.position0);
+      scope.object.zoom = scope.zoom0;
+      scope.object.updateProjectionMatrix();
+      scope.dispatchEvent(_changeEvent);
+      scope.update();
+      state = STATE.NONE;
+    };
+
+    // this method is exposed, but perhaps it would be better if we can make it private...
+    _this.update = function () {
+      var offset = new _three.Vector3();
+
+      // so camera.up is the orbit axis
+      var quat = new _three.Quaternion().setFromUnitVectors(object.up, new _three.Vector3(0, 1, 0));
+      var quatInverse = quat.clone().invert();
+      var lastPosition = new _three.Vector3();
+      var lastQuaternion = new _three.Quaternion();
+      var lastTargetPosition = new _three.Vector3();
+      var twoPI = 2 * Math.PI;
+      return function update(deltaTime = null) {
+        var position = scope.object.position;
+        offset.copy(position).sub(scope.target);
+
+        // rotate offset to "y-axis-is-up" space
+        offset.applyQuaternion(quat);
+
+        // angle from z-axis around y-axis
+        spherical.setFromVector3(offset);
+        if (scope.autoRotate && state === STATE.NONE) {
+          rotateLeft(getAutoRotationAngle(deltaTime));
+        }
+        if (scope.enableDamping) {
+          spherical.theta += sphericalDelta.theta * scope.dampingFactor;
+          spherical.phi += sphericalDelta.phi * scope.dampingFactor;
+        } else {
+          spherical.theta += sphericalDelta.theta;
+          spherical.phi += sphericalDelta.phi;
+        }
+
+        // restrict theta to be between desired limits
+
+        var min = scope.minAzimuthAngle;
+        var max = scope.maxAzimuthAngle;
+        if (isFinite(min) && isFinite(max)) {
+          if (min < -Math.PI) min += twoPI;else if (min > Math.PI) min -= twoPI;
+          if (max < -Math.PI) max += twoPI;else if (max > Math.PI) max -= twoPI;
+          if (min <= max) {
+            spherical.theta = Math.max(min, Math.min(max, spherical.theta));
+          } else {
+            spherical.theta = spherical.theta > (min + max) / 2 ? Math.max(min, spherical.theta) : Math.min(max, spherical.theta);
+          }
+        }
+
+        // restrict phi to be between desired limits
+        spherical.phi = Math.max(scope.minPolarAngle, Math.min(scope.maxPolarAngle, spherical.phi));
+        spherical.makeSafe();
+
+        // move target to panned location
+
+        if (scope.enableDamping === true) {
+          scope.target.addScaledVector(panOffset, scope.dampingFactor);
+        } else {
+          scope.target.add(panOffset);
+        }
+
+        // Limit the target distance from the cursor to create a sphere around the center of interest
+        scope.target.sub(scope.cursor);
+        scope.target.clampLength(scope.minTargetRadius, scope.maxTargetRadius);
+        scope.target.add(scope.cursor);
+
+        // adjust the camera position based on zoom only if we're not zooming to the cursor or if it's an ortho camera
+        // we adjust zoom later in these cases
+        if (scope.zoomToCursor && performCursorZoom || scope.object.isOrthographicCamera) {
+          spherical.radius = clampDistance(spherical.radius);
+        } else {
+          spherical.radius = clampDistance(spherical.radius * scale);
+        }
+        offset.setFromSpherical(spherical);
+
+        // rotate offset back to "camera-up-vector-is-up" space
+        offset.applyQuaternion(quatInverse);
+        position.copy(scope.target).add(offset);
+        scope.object.lookAt(scope.target);
+        if (scope.enableDamping === true) {
+          sphericalDelta.theta *= 1 - scope.dampingFactor;
+          sphericalDelta.phi *= 1 - scope.dampingFactor;
+          panOffset.multiplyScalar(1 - scope.dampingFactor);
+        } else {
+          sphericalDelta.set(0, 0, 0);
+          panOffset.set(0, 0, 0);
+        }
+
+        // adjust camera position
+        var zoomChanged = false;
+        if (scope.zoomToCursor && performCursorZoom) {
+          var newRadius = null;
+          if (scope.object.isPerspectiveCamera) {
+            // move the camera down the pointer ray
+            // this method avoids floating point error
+            var prevRadius = offset.length();
+            newRadius = clampDistance(prevRadius * scale);
+            var radiusDelta = prevRadius - newRadius;
+            scope.object.position.addScaledVector(dollyDirection, radiusDelta);
+            scope.object.updateMatrixWorld();
+          } else if (scope.object.isOrthographicCamera) {
+            // adjust the ortho camera position based on zoom changes
+            var mouseBefore = new _three.Vector3(mouse.x, mouse.y, 0);
+            mouseBefore.unproject(scope.object);
+            scope.object.zoom = Math.max(scope.minZoom, Math.min(scope.maxZoom, scope.object.zoom / scale));
+            scope.object.updateProjectionMatrix();
+            zoomChanged = true;
+            var mouseAfter = new _three.Vector3(mouse.x, mouse.y, 0);
+            mouseAfter.unproject(scope.object);
+            scope.object.position.sub(mouseAfter).add(mouseBefore);
+            scope.object.updateMatrixWorld();
+            newRadius = offset.length();
+          } else {
+            console.warn('WARNING: OrbitControls.js encountered an unknown camera type - zoom to cursor disabled.');
+            scope.zoomToCursor = false;
+          }
+
+          // handle the placement of the target
+          if (newRadius !== null) {
+            if (this.screenSpacePanning) {
+              // position the orbit target in front of the new camera position
+              scope.target.set(0, 0, -1).transformDirection(scope.object.matrix).multiplyScalar(newRadius).add(scope.object.position);
+            } else {
+              // get the ray and translation plane to compute target
+              _ray.origin.copy(scope.object.position);
+              _ray.direction.set(0, 0, -1).transformDirection(scope.object.matrix);
+
+              // if the camera is 20 degrees above the horizon then don't adjust the focus target to avoid
+              // extremely large values
+              if (Math.abs(scope.object.up.dot(_ray.direction)) < TILT_LIMIT) {
+                object.lookAt(scope.target);
+              } else {
+                _plane.setFromNormalAndCoplanarPoint(scope.object.up, scope.target);
+                _ray.intersectPlane(_plane, scope.target);
+              }
+            }
+          }
+        } else if (scope.object.isOrthographicCamera) {
+          scope.object.zoom = Math.max(scope.minZoom, Math.min(scope.maxZoom, scope.object.zoom / scale));
+          scope.object.updateProjectionMatrix();
+          zoomChanged = true;
+        }
+        scale = 1;
+        performCursorZoom = false;
+
+        // update condition is:
+        // min(camera displacement, camera rotation in radians)^2 > EPS
+        // using small-angle approximation cos(x/2) = 1 - x^2 / 8
+
+        if (zoomChanged || lastPosition.distanceToSquared(scope.object.position) > EPS || 8 * (1 - lastQuaternion.dot(scope.object.quaternion)) > EPS || lastTargetPosition.distanceToSquared(scope.target) > 0) {
+          scope.dispatchEvent(_changeEvent);
+          lastPosition.copy(scope.object.position);
+          lastQuaternion.copy(scope.object.quaternion);
+          lastTargetPosition.copy(scope.target);
+          return true;
+        }
+        return false;
+      };
+    }();
+    _this.dispose = function () {
+      scope.domElement.removeEventListener('contextmenu', onContextMenu);
+      scope.domElement.removeEventListener('pointerdown', onPointerDown);
+      scope.domElement.removeEventListener('pointercancel', onPointerUp);
+      scope.domElement.removeEventListener('wheel', onMouseWheel);
+      scope.domElement.removeEventListener('pointermove', onPointerMove);
+      scope.domElement.removeEventListener('pointerup', onPointerUp);
+      if (scope._domElementKeyEvents !== null) {
+        scope._domElementKeyEvents.removeEventListener('keydown', onKeyDown);
+        scope._domElementKeyEvents = null;
+      }
+
+      //scope.dispatchEvent( { type: 'dispose' } ); // should this be added here?
+    };
+
+    //
+    // internals
+    //
+
+    var scope = _assertThisInitialized(_this);
+    var STATE = {
+      NONE: -1,
+      ROTATE: 0,
+      DOLLY: 1,
+      PAN: 2,
+      TOUCH_ROTATE: 3,
+      TOUCH_PAN: 4,
+      TOUCH_DOLLY_PAN: 5,
+      TOUCH_DOLLY_ROTATE: 6
+    };
+    var state = STATE.NONE;
+    var EPS = 0.000001;
+
+    // current position in spherical coordinates
+    var spherical = new _three.Spherical();
+    var sphericalDelta = new _three.Spherical();
+    var scale = 1;
+    var panOffset = new _three.Vector3();
+    var rotateStart = new _three.Vector2();
+    var rotateEnd = new _three.Vector2();
+    var rotateDelta = new _three.Vector2();
+    var panStart = new _three.Vector2();
+    var panEnd = new _three.Vector2();
+    var panDelta = new _three.Vector2();
+    var dollyStart = new _three.Vector2();
+    var dollyEnd = new _three.Vector2();
+    var dollyDelta = new _three.Vector2();
+    var dollyDirection = new _three.Vector3();
+    var mouse = new _three.Vector2();
+    var performCursorZoom = false;
+    var pointers = [];
+    var pointerPositions = {};
+    var controlActive = false;
+    function getAutoRotationAngle(deltaTime) {
+      if (deltaTime !== null) {
+        return 2 * Math.PI / 60 * scope.autoRotateSpeed * deltaTime;
+      } else {
+        return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
+      }
+    }
+    function getZoomScale(delta) {
+      var normalizedDelta = Math.abs(delta * 0.01);
+      return Math.pow(0.95, scope.zoomSpeed * normalizedDelta);
+    }
+    function rotateLeft(angle) {
+      sphericalDelta.theta -= angle;
+    }
+    function rotateUp(angle) {
+      sphericalDelta.phi -= angle;
+    }
+    var panLeft = function () {
+      var v = new _three.Vector3();
+      return function panLeft(distance, objectMatrix) {
+        v.setFromMatrixColumn(objectMatrix, 0); // get X column of objectMatrix
+        v.multiplyScalar(-distance);
+        panOffset.add(v);
+      };
+    }();
+    var panUp = function () {
+      var v = new _three.Vector3();
+      return function panUp(distance, objectMatrix) {
+        if (scope.screenSpacePanning === true) {
+          v.setFromMatrixColumn(objectMatrix, 1);
+        } else {
+          v.setFromMatrixColumn(objectMatrix, 0);
+          v.crossVectors(scope.object.up, v);
+        }
+        v.multiplyScalar(distance);
+        panOffset.add(v);
+      };
+    }();
+
+    // deltaX and deltaY are in pixels; right and down are positive
+    var pan = function () {
+      var offset = new _three.Vector3();
+      return function pan(deltaX, deltaY) {
+        var element = scope.domElement;
+        if (scope.object.isPerspectiveCamera) {
+          // perspective
+          var position = scope.object.position;
+          offset.copy(position).sub(scope.target);
+          var targetDistance = offset.length();
+
+          // half of the fov is center to top of screen
+          targetDistance *= Math.tan(scope.object.fov / 2 * Math.PI / 180.0);
+
+          // we use only clientHeight here so aspect ratio does not distort speed
+          panLeft(2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix);
+          panUp(2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix);
+        } else if (scope.object.isOrthographicCamera) {
+          // orthographic
+          panLeft(deltaX * (scope.object.right - scope.object.left) / scope.object.zoom / element.clientWidth, scope.object.matrix);
+          panUp(deltaY * (scope.object.top - scope.object.bottom) / scope.object.zoom / element.clientHeight, scope.object.matrix);
+        } else {
+          // camera neither orthographic nor perspective
+          console.warn('WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.');
+          scope.enablePan = false;
+        }
+      };
+    }();
+    function dollyOut(dollyScale) {
+      if (scope.object.isPerspectiveCamera || scope.object.isOrthographicCamera) {
+        scale /= dollyScale;
+      } else {
+        console.warn('WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.');
+        scope.enableZoom = false;
+      }
+    }
+    function dollyIn(dollyScale) {
+      if (scope.object.isPerspectiveCamera || scope.object.isOrthographicCamera) {
+        scale *= dollyScale;
+      } else {
+        console.warn('WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.');
+        scope.enableZoom = false;
+      }
+    }
+    function updateZoomParameters(x, y) {
+      if (!scope.zoomToCursor) {
+        return;
+      }
+      performCursorZoom = true;
+      var rect = scope.domElement.getBoundingClientRect();
+      var dx = x - rect.left;
+      var dy = y - rect.top;
+      var w = rect.width;
+      var h = rect.height;
+      mouse.x = dx / w * 2 - 1;
+      mouse.y = -(dy / h) * 2 + 1;
+      dollyDirection.set(mouse.x, mouse.y, 1).unproject(scope.object).sub(scope.object.position).normalize();
+    }
+    function clampDistance(dist) {
+      return Math.max(scope.minDistance, Math.min(scope.maxDistance, dist));
+    }
+
+    //
+    // event callbacks - update the object state
+    //
+
+    function handleMouseDownRotate(event) {
+      rotateStart.set(event.clientX, event.clientY);
+    }
+    function handleMouseDownDolly(event) {
+      updateZoomParameters(event.clientX, event.clientX);
+      dollyStart.set(event.clientX, event.clientY);
+    }
+    function handleMouseDownPan(event) {
+      panStart.set(event.clientX, event.clientY);
+    }
+    function handleMouseMoveRotate(event) {
+      rotateEnd.set(event.clientX, event.clientY);
+      rotateDelta.subVectors(rotateEnd, rotateStart).multiplyScalar(scope.rotateSpeed);
+      var element = scope.domElement;
+      rotateLeft(2 * Math.PI * rotateDelta.x / element.clientHeight); // yes, height
+
+      rotateUp(2 * Math.PI * rotateDelta.y / element.clientHeight);
+      rotateStart.copy(rotateEnd);
+      scope.update();
+    }
+    function handleMouseMoveDolly(event) {
+      dollyEnd.set(event.clientX, event.clientY);
+      dollyDelta.subVectors(dollyEnd, dollyStart);
+      if (dollyDelta.y > 0) {
+        dollyOut(getZoomScale(dollyDelta.y));
+      } else if (dollyDelta.y < 0) {
+        dollyIn(getZoomScale(dollyDelta.y));
+      }
+      dollyStart.copy(dollyEnd);
+      scope.update();
+    }
+    function handleMouseMovePan(event) {
+      panEnd.set(event.clientX, event.clientY);
+      panDelta.subVectors(panEnd, panStart).multiplyScalar(scope.panSpeed);
+      pan(panDelta.x, panDelta.y);
+      panStart.copy(panEnd);
+      scope.update();
+    }
+    function handleMouseWheel(event) {
+      updateZoomParameters(event.clientX, event.clientY);
+      if (event.deltaY < 0) {
+        dollyIn(getZoomScale(event.deltaY));
+      } else if (event.deltaY > 0) {
+        dollyOut(getZoomScale(event.deltaY));
+      }
+      scope.update();
+    }
+    function handleKeyDown(event) {
+      var needsUpdate = false;
+      switch (event.code) {
+        case scope.keys.UP:
+          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            rotateUp(2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight);
+          } else {
+            pan(0, scope.keyPanSpeed);
+          }
+          needsUpdate = true;
+          break;
+        case scope.keys.BOTTOM:
+          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            rotateUp(-2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight);
+          } else {
+            pan(0, -scope.keyPanSpeed);
+          }
+          needsUpdate = true;
+          break;
+        case scope.keys.LEFT:
+          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            rotateLeft(2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight);
+          } else {
+            pan(scope.keyPanSpeed, 0);
+          }
+          needsUpdate = true;
+          break;
+        case scope.keys.RIGHT:
+          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            rotateLeft(-2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight);
+          } else {
+            pan(-scope.keyPanSpeed, 0);
+          }
+          needsUpdate = true;
+          break;
+      }
+      if (needsUpdate) {
+        // prevent the browser from scrolling on cursor keys
+        event.preventDefault();
+        scope.update();
+      }
+    }
+    function handleTouchStartRotate(event) {
+      if (pointers.length === 1) {
+        rotateStart.set(event.pageX, event.pageY);
+      } else {
+        var position = getSecondPointerPosition(event);
+        var x = 0.5 * (event.pageX + position.x);
+        var y = 0.5 * (event.pageY + position.y);
+        rotateStart.set(x, y);
+      }
+    }
+    function handleTouchStartPan(event) {
+      if (pointers.length === 1) {
+        panStart.set(event.pageX, event.pageY);
+      } else {
+        var position = getSecondPointerPosition(event);
+        var x = 0.5 * (event.pageX + position.x);
+        var y = 0.5 * (event.pageY + position.y);
+        panStart.set(x, y);
+      }
+    }
+    function handleTouchStartDolly(event) {
+      var position = getSecondPointerPosition(event);
+      var dx = event.pageX - position.x;
+      var dy = event.pageY - position.y;
+      var distance = Math.sqrt(dx * dx + dy * dy);
+      dollyStart.set(0, distance);
+    }
+    function handleTouchStartDollyPan(event) {
+      if (scope.enableZoom) handleTouchStartDolly(event);
+      if (scope.enablePan) handleTouchStartPan(event);
+    }
+    function handleTouchStartDollyRotate(event) {
+      if (scope.enableZoom) handleTouchStartDolly(event);
+      if (scope.enableRotate) handleTouchStartRotate(event);
+    }
+    function handleTouchMoveRotate(event) {
+      if (pointers.length == 1) {
+        rotateEnd.set(event.pageX, event.pageY);
+      } else {
+        var position = getSecondPointerPosition(event);
+        var x = 0.5 * (event.pageX + position.x);
+        var y = 0.5 * (event.pageY + position.y);
+        rotateEnd.set(x, y);
+      }
+      rotateDelta.subVectors(rotateEnd, rotateStart).multiplyScalar(scope.rotateSpeed);
+      var element = scope.domElement;
+      rotateLeft(2 * Math.PI * rotateDelta.x / element.clientHeight); // yes, height
+
+      rotateUp(2 * Math.PI * rotateDelta.y / element.clientHeight);
+      rotateStart.copy(rotateEnd);
+    }
+    function handleTouchMovePan(event) {
+      if (pointers.length === 1) {
+        panEnd.set(event.pageX, event.pageY);
+      } else {
+        var position = getSecondPointerPosition(event);
+        var x = 0.5 * (event.pageX + position.x);
+        var y = 0.5 * (event.pageY + position.y);
+        panEnd.set(x, y);
+      }
+      panDelta.subVectors(panEnd, panStart).multiplyScalar(scope.panSpeed);
+      pan(panDelta.x, panDelta.y);
+      panStart.copy(panEnd);
+    }
+    function handleTouchMoveDolly(event) {
+      var position = getSecondPointerPosition(event);
+      var dx = event.pageX - position.x;
+      var dy = event.pageY - position.y;
+      var distance = Math.sqrt(dx * dx + dy * dy);
+      dollyEnd.set(0, distance);
+      dollyDelta.set(0, Math.pow(dollyEnd.y / dollyStart.y, scope.zoomSpeed));
+      dollyOut(dollyDelta.y);
+      dollyStart.copy(dollyEnd);
+      var centerX = (event.pageX + position.x) * 0.5;
+      var centerY = (event.pageY + position.y) * 0.5;
+      updateZoomParameters(centerX, centerY);
+    }
+    function handleTouchMoveDollyPan(event) {
+      if (scope.enableZoom) handleTouchMoveDolly(event);
+      if (scope.enablePan) handleTouchMovePan(event);
+    }
+    function handleTouchMoveDollyRotate(event) {
+      if (scope.enableZoom) handleTouchMoveDolly(event);
+      if (scope.enableRotate) handleTouchMoveRotate(event);
+    }
+
+    //
+    // event handlers - FSM: listen for events and reset state
+    //
+
+    function onPointerDown(event) {
+      if (scope.enabled === false) return;
+      if (pointers.length === 0) {
+        scope.domElement.setPointerCapture(event.pointerId);
+        scope.domElement.addEventListener('pointermove', onPointerMove);
+        scope.domElement.addEventListener('pointerup', onPointerUp);
+      }
+
+      //
+
+      addPointer(event);
+      if (event.pointerType === 'touch') {
+        onTouchStart(event);
+      } else {
+        onMouseDown(event);
+      }
+    }
+    function onPointerMove(event) {
+      if (scope.enabled === false) return;
+      if (event.pointerType === 'touch') {
+        onTouchMove(event);
+      } else {
+        onMouseMove(event);
+      }
+    }
+    function onPointerUp(event) {
+      removePointer(event);
+      if (pointers.length === 0) {
+        scope.domElement.releasePointerCapture(event.pointerId);
+        scope.domElement.removeEventListener('pointermove', onPointerMove);
+        scope.domElement.removeEventListener('pointerup', onPointerUp);
+      }
+      scope.dispatchEvent(_endEvent);
+      state = STATE.NONE;
+    }
+    function onMouseDown(event) {
+      var mouseAction;
+      switch (event.button) {
+        case 0:
+          mouseAction = scope.mouseButtons.LEFT;
+          break;
+        case 1:
+          mouseAction = scope.mouseButtons.MIDDLE;
+          break;
+        case 2:
+          mouseAction = scope.mouseButtons.RIGHT;
+          break;
+        default:
+          mouseAction = -1;
+      }
+      switch (mouseAction) {
+        case _three.MOUSE.DOLLY:
+          if (scope.enableZoom === false) return;
+          handleMouseDownDolly(event);
+          state = STATE.DOLLY;
+          break;
+        case _three.MOUSE.ROTATE:
+          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            if (scope.enablePan === false) return;
+            handleMouseDownPan(event);
+            state = STATE.PAN;
+          } else {
+            if (scope.enableRotate === false) return;
+            handleMouseDownRotate(event);
+            state = STATE.ROTATE;
+          }
+          break;
+        case _three.MOUSE.PAN:
+          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            if (scope.enableRotate === false) return;
+            handleMouseDownRotate(event);
+            state = STATE.ROTATE;
+          } else {
+            if (scope.enablePan === false) return;
+            handleMouseDownPan(event);
+            state = STATE.PAN;
+          }
+          break;
+        default:
+          state = STATE.NONE;
+      }
+      if (state !== STATE.NONE) {
+        scope.dispatchEvent(_startEvent);
+      }
+    }
+    function onMouseMove(event) {
+      switch (state) {
+        case STATE.ROTATE:
+          if (scope.enableRotate === false) return;
+          handleMouseMoveRotate(event);
+          break;
+        case STATE.DOLLY:
+          if (scope.enableZoom === false) return;
+          handleMouseMoveDolly(event);
+          break;
+        case STATE.PAN:
+          if (scope.enablePan === false) return;
+          handleMouseMovePan(event);
+          break;
+      }
+    }
+    function onMouseWheel(event) {
+      if (scope.enabled === false || scope.enableZoom === false || state !== STATE.NONE) return;
+      event.preventDefault();
+      scope.dispatchEvent(_startEvent);
+      handleMouseWheel(customWheelEvent(event));
+      scope.dispatchEvent(_endEvent);
+    }
+    function customWheelEvent(event) {
+      var mode = event.deltaMode;
+
+      // minimal wheel event altered to meet delta-zoom demand
+      var newEvent = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        deltaY: event.deltaY
+      };
+      switch (mode) {
+        case 1:
+          // LINE_MODE
+          newEvent.deltaY *= 16;
+          break;
+        case 2:
+          // PAGE_MODE
+          newEvent.deltaY *= 100;
+          break;
+      }
+
+      // detect if event was triggered by pinching
+      if (event.ctrlKey && !controlActive) {
+        newEvent.deltaY *= 10;
+      }
+      return newEvent;
+    }
+    function interceptControlDown(event) {
+      if (event.key === "Control") {
+        controlActive = true;
+        document.addEventListener('keyup', interceptControlUp, {
+          passive: true,
+          capture: true
+        });
+      }
+    }
+    function interceptControlUp(event) {
+      if (event.key === "Control") {
+        controlActive = false;
+        document.removeEventListener('keyup', interceptControlUp, {
+          passive: true,
+          capture: true
+        });
+      }
+    }
+    function onKeyDown(event) {
+      if (scope.enabled === false || scope.enablePan === false) return;
+      handleKeyDown(event);
+    }
+    function onTouchStart(event) {
+      trackPointer(event);
+      switch (pointers.length) {
+        case 1:
+          switch (scope.touches.ONE) {
+            case _three.TOUCH.ROTATE:
+              if (scope.enableRotate === false) return;
+              handleTouchStartRotate(event);
+              state = STATE.TOUCH_ROTATE;
+              break;
+            case _three.TOUCH.PAN:
+              if (scope.enablePan === false) return;
+              handleTouchStartPan(event);
+              state = STATE.TOUCH_PAN;
+              break;
+            default:
+              state = STATE.NONE;
+          }
+          break;
+        case 2:
+          switch (scope.touches.TWO) {
+            case _three.TOUCH.DOLLY_PAN:
+              if (scope.enableZoom === false && scope.enablePan === false) return;
+              handleTouchStartDollyPan(event);
+              state = STATE.TOUCH_DOLLY_PAN;
+              break;
+            case _three.TOUCH.DOLLY_ROTATE:
+              if (scope.enableZoom === false && scope.enableRotate === false) return;
+              handleTouchStartDollyRotate(event);
+              state = STATE.TOUCH_DOLLY_ROTATE;
+              break;
+            default:
+              state = STATE.NONE;
+          }
+          break;
+        default:
+          state = STATE.NONE;
+      }
+      if (state !== STATE.NONE) {
+        scope.dispatchEvent(_startEvent);
+      }
+    }
+    function onTouchMove(event) {
+      trackPointer(event);
+      switch (state) {
+        case STATE.TOUCH_ROTATE:
+          if (scope.enableRotate === false) return;
+          handleTouchMoveRotate(event);
+          scope.update();
+          break;
+        case STATE.TOUCH_PAN:
+          if (scope.enablePan === false) return;
+          handleTouchMovePan(event);
+          scope.update();
+          break;
+        case STATE.TOUCH_DOLLY_PAN:
+          if (scope.enableZoom === false && scope.enablePan === false) return;
+          handleTouchMoveDollyPan(event);
+          scope.update();
+          break;
+        case STATE.TOUCH_DOLLY_ROTATE:
+          if (scope.enableZoom === false && scope.enableRotate === false) return;
+          handleTouchMoveDollyRotate(event);
+          scope.update();
+          break;
+        default:
+          state = STATE.NONE;
+      }
+    }
+    function onContextMenu(event) {
+      if (scope.enabled === false) return;
+      event.preventDefault();
+    }
+    function addPointer(event) {
+      pointers.push(event.pointerId);
+    }
+    function removePointer(event) {
+      delete pointerPositions[event.pointerId];
+      for (var i = 0; i < pointers.length; i++) {
+        if (pointers[i] == event.pointerId) {
+          pointers.splice(i, 1);
+          return;
+        }
+      }
+    }
+    function trackPointer(event) {
+      var position = pointerPositions[event.pointerId];
+      if (position === undefined) {
+        position = new _three.Vector2();
+        pointerPositions[event.pointerId] = position;
+      }
+      position.set(event.pageX, event.pageY);
+    }
+    function getSecondPointerPosition(event) {
+      var pointerId = event.pointerId === pointers[0] ? pointers[1] : pointers[0];
+      return pointerPositions[pointerId];
+    }
+
+    //
+
+    scope.domElement.addEventListener('contextmenu', onContextMenu);
+    scope.domElement.addEventListener('pointerdown', onPointerDown);
+    scope.domElement.addEventListener('pointercancel', onPointerUp);
+    scope.domElement.addEventListener('wheel', onMouseWheel, {
+      passive: false
+    });
+    document.addEventListener('keydown', interceptControlDown, {
+      passive: true,
+      capture: true
+    });
+
+    // force an update at start
+
+    _this.update();
+    return _this;
+  }
+  return _createClass(OrbitControls);
+}(_three.EventDispatcher);
+exports.OrbitControls = OrbitControls;
+},{"three":"node_modules/three/build/three.module.js"}],"js/shader/fargment.glsl":[function(require,module,exports) {
+module.exports = "#define GLSLIFY 1\nuniform float time;\nuniform float progress;\nuniform sampler2D texture1;\nuniform vec4 resolution;\nvarying vec2 vUv;\nvarying vec3 vPosition;\nvarying vec3 vColor;\nfloat PI = 3.1415926535897932384626433832795;\n\nvoid main(){\n    // vec2 newUV = (vUv - vec2(0.5))*resolution.zw + vec2(0.5);\n    gl_FragColor = vec4(vUv, 0.0, 1.);\n    gl_FragColor = vec4(vColor, 1.);\n}";
+},{}],"js/shader/vertex.glsl":[function(require,module,exports) {
+module.exports = "#define GLSLIFY 1\nuniform float time;\nuniform vec3 uColor[5];\nvarying vec2 vUv;\nvarying vec3 vPosition;\nvarying vec3 vColor;\nvarying vec2 pixels;\nfloat PI = 3.1415926535897932384626433832795;\n\n//\tSimplex 3D Noise \n//\tby Ian McEwan, Ashima Arts\n//\nvec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}\nvec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}\n\nfloat snoise(vec3 v){ \n  const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;\n  const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);\n\n// First corner\n  vec3 i  = floor(v + dot(v, C.yyy) );\n  vec3 x0 =   v - i + dot(i, C.xxx) ;\n\n// Other corners\n  vec3 g = step(x0.yzx, x0.xyz);\n  vec3 l = 1.0 - g;\n  vec3 i1 = min( g.xyz, l.zxy );\n  vec3 i2 = max( g.xyz, l.zxy );\n\n  //  x0 = x0 - 0. + 0.0 * C \n  vec3 x1 = x0 - i1 + 1.0 * C.xxx;\n  vec3 x2 = x0 - i2 + 2.0 * C.xxx;\n  vec3 x3 = x0 - 1. + 3.0 * C.xxx;\n\n// Permutations\n  i = mod(i, 289.0 ); \n  vec4 p = permute( permute( permute( \n             i.z + vec4(0.0, i1.z, i2.z, 1.0 ))\n           + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) \n           + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));\n\n// Gradients\n// ( N*N points uniformly over a square, mapped onto an octahedron.)\n  float n_ = 1.0/7.0; // N=7\n  vec3  ns = n_ * D.wyz - D.xzx;\n\n  vec4 j = p - 49.0 * floor(p * ns.z *ns.z);  //  mod(p,N*N)\n\n  vec4 x_ = floor(j * ns.z);\n  vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)\n\n  vec4 x = x_ *ns.x + ns.yyyy;\n  vec4 y = y_ *ns.x + ns.yyyy;\n  vec4 h = 1.0 - abs(x) - abs(y);\n\n  vec4 b0 = vec4( x.xy, y.xy );\n  vec4 b1 = vec4( x.zw, y.zw );\n\n  vec4 s0 = floor(b0)*2.0 + 1.0;\n  vec4 s1 = floor(b1)*2.0 + 1.0;\n  vec4 sh = -step(h, vec4(0.0));\n\n  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;\n  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;\n\n  vec3 p0 = vec3(a0.xy,h.x);\n  vec3 p1 = vec3(a0.zw,h.y);\n  vec3 p2 = vec3(a1.xy,h.z);\n  vec3 p3 = vec3(a1.zw,h.w);\n\n//Normalise gradients\n  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));\n  p0 *= norm.x;\n  p1 *= norm.y;\n  p2 *= norm.z;\n  p3 *= norm.w;\n\n// Mix final noise value\n  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);\n  m = m * m;\n  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), \n                                dot(p2,x2), dot(p3,x3) ) );\n}\n\nvoid main() {\n\n    vec2 noiseCoord = uv*vec2(3.,4.);\n\n    float tilt = -0.8*uv.y;\n\n    float incline = uv.x*0.1;\n\n    float offset = incline*mix(-.25, 0.25, uv.y);\n\n    float noise  = snoise(vec3(noiseCoord.x + time*3.,noiseCoord.y, time * 10.));\n\n    noise = max(0., noise);\n\n    vec3 pos = vec3(position.x, position.y, position.z + noise * 0.3 + tilt + incline + offset);\n    \n\n    vColor = uColor[4];\n\n    for(int i = 0; i < 5; i++) {\n\n        float noiseFlow = 5. + float(i)*0.3;\n        float noiseSpeed = 10. + float(i)*0.3;\n\n        float noiseSeed = 1. + float(i)*10.;\n        vec2 noiseFreq = vec2(1., 1.4)*0.4;\n\n        float noiseFloor = 0.1;\n        float noiseCeil = 0.6 + float(i)*0.07;\n        \n        float noise  = smoothstep(noiseFloor,noiseCeil,\n            snoise(\n                vec3(\n                    noiseCoord.x*noiseFreq.x + time*noiseFlow,\n                    noiseCoord.y*noiseFreq.y, \n                    time * noiseSpeed + noiseSeed\n                )\n            )\n        );\n\n        vColor = mix(vColor, uColor[i], noise);\n    }\n    \n    \n    vUv = uv;\n    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);\n\n}";
+},{}],"node_modules/nice-color-palettes/100.json":[function(require,module,exports) {
+module.exports = [["#69d2e7","#a7dbd8","#e0e4cc","#f38630","#fa6900"],["#fe4365","#fc9d9a","#f9cdad","#c8c8a9","#83af9b"],["#ecd078","#d95b43","#c02942","#542437","#53777a"],["#556270","#4ecdc4","#c7f464","#ff6b6b","#c44d58"],["#774f38","#e08e79","#f1d4af","#ece5ce","#c5e0dc"],["#e8ddcb","#cdb380","#036564","#033649","#031634"],["#490a3d","#bd1550","#e97f02","#f8ca00","#8a9b0f"],["#594f4f","#547980","#45ada8","#9de0ad","#e5fcc2"],["#00a0b0","#6a4a3c","#cc333f","#eb6841","#edc951"],["#e94e77","#d68189","#c6a49a","#c6e5d9","#f4ead5"],["#3fb8af","#7fc7af","#dad8a7","#ff9e9d","#ff3d7f"],["#d9ceb2","#948c75","#d5ded9","#7a6a53","#99b2b7"],["#ffffff","#cbe86b","#f2e9e1","#1c140d","#cbe86b"],["#efffcd","#dce9be","#555152","#2e2633","#99173c"],["#343838","#005f6b","#008c9e","#00b4cc","#00dffc"],["#413e4a","#73626e","#b38184","#f0b49e","#f7e4be"],["#ff4e50","#fc913a","#f9d423","#ede574","#e1f5c4"],["#99b898","#fecea8","#ff847c","#e84a5f","#2a363b"],["#655643","#80bca3","#f6f7bd","#e6ac27","#bf4d28"],["#00a8c6","#40c0cb","#f9f2e7","#aee239","#8fbe00"],["#351330","#424254","#64908a","#e8caa4","#cc2a41"],["#554236","#f77825","#d3ce3d","#f1efa5","#60b99a"],["#5d4157","#838689","#a8caba","#cad7b2","#ebe3aa"],["#8c2318","#5e8c6a","#88a65e","#bfb35a","#f2c45a"],["#fad089","#ff9c5b","#f5634a","#ed303c","#3b8183"],["#ff4242","#f4fad2","#d4ee5e","#e1edb9","#f0f2eb"],["#f8b195","#f67280","#c06c84","#6c5b7b","#355c7d"],["#d1e751","#ffffff","#000000","#4dbce9","#26ade4"],["#1b676b","#519548","#88c425","#bef202","#eafde6"],["#5e412f","#fcebb6","#78c0a8","#f07818","#f0a830"],["#bcbdac","#cfbe27","#f27435","#f02475","#3b2d38"],["#452632","#91204d","#e4844a","#e8bf56","#e2f7ce"],["#eee6ab","#c5bc8e","#696758","#45484b","#36393b"],["#f0d8a8","#3d1c00","#86b8b1","#f2d694","#fa2a00"],["#2a044a","#0b2e59","#0d6759","#7ab317","#a0c55f"],["#f04155","#ff823a","#f2f26f","#fff7bd","#95cfb7"],["#b9d7d9","#668284","#2a2829","#493736","#7b3b3b"],["#bbbb88","#ccc68d","#eedd99","#eec290","#eeaa88"],["#b3cc57","#ecf081","#ffbe40","#ef746f","#ab3e5b"],["#a3a948","#edb92e","#f85931","#ce1836","#009989"],["#300030","#480048","#601848","#c04848","#f07241"],["#67917a","#170409","#b8af03","#ccbf82","#e33258"],["#aab3ab","#c4cbb7","#ebefc9","#eee0b7","#e8caaf"],["#e8d5b7","#0e2430","#fc3a51","#f5b349","#e8d5b9"],["#ab526b","#bca297","#c5ceae","#f0e2a4","#f4ebc3"],["#607848","#789048","#c0d860","#f0f0d8","#604848"],["#b6d8c0","#c8d9bf","#dadabd","#ecdbbc","#fedcba"],["#a8e6ce","#dcedc2","#ffd3b5","#ffaaa6","#ff8c94"],["#3e4147","#fffedf","#dfba69","#5a2e2e","#2a2c31"],["#fc354c","#29221f","#13747d","#0abfbc","#fcf7c5"],["#cc0c39","#e6781e","#c8cf02","#f8fcc1","#1693a7"],["#1c2130","#028f76","#b3e099","#ffeaad","#d14334"],["#a7c5bd","#e5ddcb","#eb7b59","#cf4647","#524656"],["#dad6ca","#1bb0ce","#4f8699","#6a5e72","#563444"],["#5c323e","#a82743","#e15e32","#c0d23e","#e5f04c"],["#edebe6","#d6e1c7","#94c7b6","#403b33","#d3643b"],["#fdf1cc","#c6d6b8","#987f69","#e3ad40","#fcd036"],["#230f2b","#f21d41","#ebebbc","#bce3c5","#82b3ae"],["#b9d3b0","#81bda4","#b28774","#f88f79","#f6aa93"],["#3a111c","#574951","#83988e","#bcdea5","#e6f9bc"],["#5e3929","#cd8c52","#b7d1a3","#dee8be","#fcf7d3"],["#1c0113","#6b0103","#a30006","#c21a01","#f03c02"],["#000000","#9f111b","#b11623","#292c37","#cccccc"],["#382f32","#ffeaf2","#fcd9e5","#fbc5d8","#f1396d"],["#e3dfba","#c8d6bf","#93ccc6","#6cbdb5","#1a1f1e"],["#f6f6f6","#e8e8e8","#333333","#990100","#b90504"],["#1b325f","#9cc4e4","#e9f2f9","#3a89c9","#f26c4f"],["#a1dbb2","#fee5ad","#faca66","#f7a541","#f45d4c"],["#c1b398","#605951","#fbeec2","#61a6ab","#accec0"],["#5e9fa3","#dcd1b4","#fab87f","#f87e7b","#b05574"],["#951f2b","#f5f4d7","#e0dfb1","#a5a36c","#535233"],["#8dccad","#988864","#fea6a2","#f9d6ac","#ffe9af"],["#2d2d29","#215a6d","#3ca2a2","#92c7a3","#dfece6"],["#413d3d","#040004","#c8ff00","#fa023c","#4b000f"],["#eff3cd","#b2d5ba","#61ada0","#248f8d","#605063"],["#ffefd3","#fffee4","#d0ecea","#9fd6d2","#8b7a5e"],["#cfffdd","#b4dec1","#5c5863","#a85163","#ff1f4c"],["#9dc9ac","#fffec7","#f56218","#ff9d2e","#919167"],["#4e395d","#827085","#8ebe94","#ccfc8e","#dc5b3e"],["#a8a7a7","#cc527a","#e8175d","#474747","#363636"],["#f8edd1","#d88a8a","#474843","#9d9d93","#c5cfc6"],["#046d8b","#309292","#2fb8ac","#93a42a","#ecbe13"],["#f38a8a","#55443d","#a0cab5","#cde9ca","#f1edd0"],["#a70267","#f10c49","#fb6b41","#f6d86b","#339194"],["#ff003c","#ff8a00","#fabe28","#88c100","#00c176"],["#ffedbf","#f7803c","#f54828","#2e0d23","#f8e4c1"],["#4e4d4a","#353432","#94ba65","#2790b0","#2b4e72"],["#0ca5b0","#4e3f30","#fefeeb","#f8f4e4","#a5b3aa"],["#4d3b3b","#de6262","#ffb88c","#ffd0b3","#f5e0d3"],["#fffbb7","#a6f6af","#66b6ab","#5b7c8d","#4f2958"],["#edf6ee","#d1c089","#b3204d","#412e28","#151101"],["#9d7e79","#ccac95","#9a947c","#748b83","#5b756c"],["#fcfef5","#e9ffe1","#cdcfb7","#d6e6c3","#fafbe3"],["#9cddc8","#bfd8ad","#ddd9ab","#f7af63","#633d2e"],["#30261c","#403831","#36544f","#1f5f61","#0b8185"],["#aaff00","#ffaa00","#ff00aa","#aa00ff","#00aaff"],["#d1313d","#e5625c","#f9bf76","#8eb2c5","#615375"],["#ffe181","#eee9e5","#fad3b2","#ffba7f","#ff9c97"],["#73c8a9","#dee1b6","#e1b866","#bd5532","#373b44"],["#805841","#dcf7f3","#fffcdd","#ffd8d8","#f5a2a2"]];
 },{}],"js/app.js":[function(require,module,exports) {
 "use strict";
 
@@ -38102,6 +39047,10 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 var THREE = _interopRequireWildcard(require("three"));
+var _OrbitControls = require("three/examples/jsm/controls/OrbitControls");
+var _fargment = _interopRequireDefault(require("./shader/fargment.glsl"));
+var _vertex = _interopRequireDefault(require("./shader/vertex.glsl"));
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
 function _interopRequireWildcard(obj, nodeInterop) { if (!nodeInterop && obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(nodeInterop); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (key !== "default" && Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
@@ -38110,6 +39059,19 @@ function _defineProperties(target, props) { for (var i = 0; i < props.length; i+
 function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); Object.defineProperty(Constructor, "prototype", { writable: false }); return Constructor; }
 function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _typeof(key) === "symbol" ? key : String(key); }
 function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+var colors = require('nice-color-palettes');
+var ind = Math.floor(Math.random() * colors.length);
+// ind = 19;
+var palette = colors[ind];
+
+/***
+ * Comment below palette array for using nice-color-palettes
+ */
+palette = ["#0033ff", "#6f3437", "#b8fff4", "#66d1ff", "#352fe0"];
+palette = palette.map(function (color) {
+  return new THREE.Color(color);
+});
+console.log(palette);
 var Sketch = /*#__PURE__*/function () {
   function Sketch(option) {
     _classCallCheck(this, Sketch);
@@ -38117,31 +39079,68 @@ var Sketch = /*#__PURE__*/function () {
     this.container = option.dom;
     this.width = this.container.offsetWidth;
     this.height = this.container.offsetHeight;
-    this.camera = new THREE.PerspectiveCamera(70, this.width / this.height, 0.01, 10);
-    this.camera.position.z = 1;
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true
+      antialias: true,
+      alpha: true
     });
     this.renderer.setSize(this.width, this.height);
+    this.camera = new THREE.PerspectiveCamera(70, this.width / this.height, 0.01, 10);
+    this.camera.position.set(0, 0, 0.2);
+
+    // this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    // this.controls.enableDamping = true;
     this.container.appendChild(this.renderer.domElement);
     this.time = 0;
-    this.render();
     this.addObject();
+    this.render();
+    this.resize();
   }
   _createClass(Sketch, [{
+    key: "resize",
+    value: function resize() {
+      window.addEventListener('resize', this.onWindowResize.bind(this), false);
+    }
+  }, {
+    key: "onWindowResize",
+    value: function onWindowResize() {
+      this.width = this.container.offsetWidth;
+      this.height = this.container.offsetHeight;
+      this.camera.aspect = this.width / this.height;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(this.width, this.height);
+    }
+  }, {
     key: "addObject",
     value: function addObject() {
-      this.geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-      this.material = new THREE.MeshNormalMaterial();
+      this.geometry = new THREE.PlaneGeometry(2.5, 2.5, 300, 300);
+      this.material = new THREE.ShaderMaterial({
+        side: THREE.DoubleSide,
+        uniforms: {
+          time: {
+            value: 0
+          },
+          uColor: {
+            value: palette
+          },
+          resolution: {
+            value: new THREE.Vector4()
+          }
+        },
+        // wireframe: true,
+        // transparent: true,
+        fragmentShader: _fargment.default,
+        vertexShader: _vertex.default
+      });
       this.mesh = new THREE.Mesh(this.geometry, this.material);
       this.scene.add(this.mesh);
     }
   }, {
     key: "render",
     value: function render() {
+      // this.controls.update();
+      this.time += 0.0002;
+      this.material.uniforms.time.value = this.time;
       requestAnimationFrame(this.render.bind(this));
-      //   this.mesh.rotation.x = this.time / 2000;
-      //   this.mesh.rotation.y = this.time / 1000;
       this.renderer.render(this.scene, this.camera);
     }
   }]);
@@ -38151,7 +39150,7 @@ exports.default = Sketch;
 new Sketch({
   dom: document.getElementById("container")
 });
-},{"three":"node_modules/three/build/three.module.js"}],"../../../AppData/Roaming/npm/node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
+},{"three":"node_modules/three/build/three.module.js","three/examples/jsm/controls/OrbitControls":"node_modules/three/examples/jsm/controls/OrbitControls.js","./shader/fargment.glsl":"js/shader/fargment.glsl","./shader/vertex.glsl":"js/shader/vertex.glsl","nice-color-palettes":"node_modules/nice-color-palettes/100.json"}],"../../../AppData/Roaming/npm/node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
 var global = arguments[3];
 var OVERLAY_ID = '__parcel__error__overlay__';
 var OldModule = module.bundle.Module;
@@ -38176,7 +39175,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "59418" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "52652" + '/');
   ws.onmessage = function (event) {
     checkedAssets = {};
     assetsToAccept = [];
